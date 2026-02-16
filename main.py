@@ -59,17 +59,32 @@ def load_data():
         df = pd.read_csv('consumer_complaints.csv', low_memory=False)
         st.success("✅ Data dimuat dari file lokal")
     except FileNotFoundError:
-        # Untuk Streamlit Cloud - ganti URL ini dengan link Google Drive/Dropbox Anda
-        # Contoh: https://drive.google.com/uc?id=YOUR_FILE_ID&export=download
+        # Untuk Streamlit Cloud - load dari URL
         data_url = st.secrets.get("DATA_URL", "")
         if data_url:
             with st.spinner("📥 Memuat data dari cloud storage (ini mungkin memakan waktu beberapa menit)..."):
                 try:
+                    # Untuk Google Drive file besar, perlu tambahkan parameter confirm
+                    # Deteksi jika URL dari Google Drive
+                    if 'drive.google.com' in data_url:
+                        # Extract file ID
+                        if '/file/d/' in data_url:
+                            file_id = data_url.split('/file/d/')[1].split('/')[0]
+                        elif 'id=' in data_url:
+                            file_id = data_url.split('id=')[1].split('&')[0]
+                        else:
+                            file_id = None
+
+                        if file_id:
+                            # Format URL dengan confirm untuk bypass virus scan warning
+                            data_url = f"https://drive.usercontent.google.com/download?id={file_id}&export=download&confirm=t"
+
                     df = pd.read_csv(data_url, low_memory=False)
                     st.success(f"✅ Data berhasil dimuat! Total baris: {len(df):,}")
                 except Exception as e:
                     st.error(f"❌ Error saat memuat data dari cloud: {str(e)}")
                     st.info("💡 Pastikan link Google Drive sudah benar dan file dapat diakses publik.")
+                    st.code(f"URL yang digunakan: {data_url}")
                     st.stop()
         else:
             st.error("❌ File data tidak ditemukan. Silakan upload 'consumer_complaints.csv' atau set DATA_URL di secrets.")

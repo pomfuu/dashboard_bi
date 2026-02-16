@@ -14,23 +14,28 @@ File `consumer_complaints.csv` (168 MB) terlalu besar untuk di-push ke GitHub (l
    - Klik kanan file → "Get link" → "Anyone with the link"
    - Copy link yang didapat (misal: `https://drive.google.com/file/d/ABC123XYZ/view`)
 
-2. **Ubah format link menjadi direct download:**
+2. **Copy File ID dari URL:**
    ```
    Format awal:
    https://drive.google.com/file/d/ABC123XYZ/view?usp=sharing
 
-   Ubah menjadi:
-   https://drive.google.com/uc?id=ABC123XYZ&export=download
+   File ID: ABC123XYZ (bagian setelah /d/ dan sebelum /view)
    ```
 
 3. **Setting Streamlit Cloud Secrets:**
    - Buka [Streamlit Cloud](https://share.streamlit.io)
    - Pilih app Anda
    - Klik ⚙️ Settings → Secrets
-   - Tambahkan:
+   - Tambahkan (bisa pakai URL asli atau yang sudah diformat):
    ```toml
-   DATA_URL = "https://drive.google.com/uc?id=ABC123XYZ&export=download"
+   # Opsi 1: URL asli (akan dikonversi otomatis)
+   DATA_URL = "https://drive.google.com/file/d/ABC123XYZ/view?usp=sharing"
+
+   # Opsi 2: Direct download URL
+   DATA_URL = "https://drive.usercontent.google.com/download?id=ABC123XYZ&export=download&confirm=t"
    ```
+
+   **Catatan:** Aplikasi akan otomatis mendeteksi dan mengkonversi URL Google Drive ke format yang benar.
 
 4. **Deploy ulang aplikasi**
 
