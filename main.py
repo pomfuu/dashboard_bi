@@ -53,7 +53,20 @@ st.markdown("""
 @st.cache_data
 def load_data():
     """Memuat dan memproses data keluhan konsumen"""
-    df = pd.read_csv('consumer_complaints.csv', low_memory=False)
+    # Coba load dari file lokal, jika tidak ada load dari URL
+    try:
+        # Untuk local development
+        df = pd.read_csv('consumer_complaints.csv', low_memory=False)
+    except FileNotFoundError:
+        # Untuk Streamlit Cloud - ganti URL ini dengan link Google Drive/Dropbox Anda
+        # Contoh: https://drive.google.com/uc?id=YOUR_FILE_ID&export=download
+        data_url = st.secrets.get("DATA_URL", "")
+        if data_url:
+            st.info("📥 Memuat data dari cloud storage...")
+            df = pd.read_csv(data_url, low_memory=False)
+        else:
+            st.error("❌ File data tidak ditemukan. Silakan upload 'consumer_complaints.csv' atau set DATA_URL di secrets.")
+            st.stop()
 
     # Konversi kolom tanggal
     df['date_received'] = pd.to_datetime(df['date_received'], errors='coerce')
