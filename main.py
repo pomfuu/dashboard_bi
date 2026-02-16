@@ -57,20 +57,42 @@ def load_data():
     try:
         # Untuk local development
         df = pd.read_csv('consumer_complaints.csv', low_memory=False)
+        st.success("✅ Data dimuat dari file lokal")
     except FileNotFoundError:
         # Untuk Streamlit Cloud - ganti URL ini dengan link Google Drive/Dropbox Anda
         # Contoh: https://drive.google.com/uc?id=YOUR_FILE_ID&export=download
         data_url = st.secrets.get("DATA_URL", "")
         if data_url:
-            st.info("📥 Memuat data dari cloud storage...")
-            df = pd.read_csv(data_url, low_memory=False)
+            with st.spinner("📥 Memuat data dari cloud storage (ini mungkin memakan waktu beberapa menit)..."):
+                try:
+                    df = pd.read_csv(data_url, low_memory=False)
+                    st.success(f"✅ Data berhasil dimuat! Total baris: {len(df):,}")
+                except Exception as e:
+                    st.error(f"❌ Error saat memuat data dari cloud: {str(e)}")
+                    st.info("💡 Pastikan link Google Drive sudah benar dan file dapat diakses publik.")
+                    st.stop()
         else:
             st.error("❌ File data tidak ditemukan. Silakan upload 'consumer_complaints.csv' atau set DATA_URL di secrets.")
+            st.info("📋 Untuk deployment, tambahkan DATA_URL di Streamlit Cloud Secrets.")
             st.stop()
 
-    # Konversi kolom tanggal
-    df['date_received'] = pd.to_datetime(df['date_received'], errors='coerce')
-    df['date_sent_to_company'] = pd.to_datetime(df['date_sent_to_company'], errors='coerce')
+    # Cek kolom yang ada dan mapping jika perlu
+    # Beberapa dataset mungkin punya nama kolom dengan case berbeda
+    df.columns = df.columns.str.lower().str.strip()
+
+    # Konversi kolom tanggal (dengan pengecekan)
+    if 'date_received' in df.columns:
+        df['date_received'] = pd.to_datetime(df['date_received'], errors='coerce')
+    elif 'date received' in df.columns:
+        df['date_received'] = pd.to_datetime(df['date received'], errors='coerce')
+    else:
+        st.error(f"❌ Kolom tanggal tidak ditemukan. Kolom yang tersedia: {list(df.columns)}")
+        st.stop()
+
+    if 'date_sent_to_company' in df.columns:
+        df['date_sent_to_company'] = pd.to_datetime(df['date_sent_to_company'], errors='coerce')
+    elif 'date sent to company' in df.columns:
+        df['date_sent_to_company'] = pd.to_datetime(df['date sent to company'], errors='coerce')
 
     # Ekstrak fitur tanggal
     df['tahun'] = df['date_received'].dt.year
@@ -80,7 +102,10 @@ def load_data():
     df['kuartal'] = df['date_received'].dt.quarter
 
     # Hitung waktu respons
-    df['waktu_respons_hari'] = (df['date_sent_to_company'] - df['date_received']).dt.days
+    if 'date_sent_to_company' in df.columns:
+        df['waktu_respons_hari'] = (df['date_sent_to_company'] - df['date_received']).dt.days
+    else:
+        df['waktu_respons_hari'] = 0
 
     return df
 
