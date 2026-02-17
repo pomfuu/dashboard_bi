@@ -186,7 +186,8 @@ with col5:
 st.markdown("---")
 
 # Tab untuk analisis berbeda
-tab0, tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab_main, tab0, tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    "⭐ 5 Chart Utama",
     "🚨 Executive Story",
     "🔍 Insight Utama",
     "📊 Analisis Tren",
@@ -194,6 +195,462 @@ tab0, tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "📋 Pivot Tables",
     "💡 Rekomendasi Power BI"
 ])
+
+with tab_main:
+    # ── Header ──────────────────────────────────────────────────────────────
+    st.markdown("""
+    <div style='background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 60%, #1f77b4 100%);
+                padding: 1.8rem 2rem; border-radius: 12px; margin-bottom: 1.5rem;'>
+        <h1 style='color:white; margin:0; font-size:1.7rem; font-weight:700;'>
+            ⭐ 5 Chart yang Paling Berbunyi
+        </h1>
+        <p style='color:#93c5fd; margin:0.4rem 0 0 0; font-size:0.95rem;'>
+            Dipilih berdasarkan kedalaman insight, kejelasan cerita, dan relevansi untuk keputusan bisnis
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ── Pre-compute data ─────────────────────────────────────────────────────
+    pc          = filtered_df['product'].value_counts()
+    top8_p      = pc.head(8).index.tolist()
+    top5_p      = pc.head(5).index.tolist()
+    top10_co    = filtered_df['company'].value_counts().head(10).index.tolist()
+    top5_co     = filtered_df['company'].value_counts().head(5).index.tolist()
+    top5_st     = filtered_df['state'].value_counts().head(5).index.tolist()
+    top5_iss    = filtered_df['issue'].value_counts().head(5).index.tolist()
+
+    # ════════════════════════════════════════════════════════════════════════
+    # CHART 1 — Stacked Bar Horizontal: Produk Berbahaya
+    # ════════════════════════════════════════════════════════════════════════
+    st.markdown("""
+    <div style='display:flex; align-items:flex-start; gap:1rem; margin:1.2rem 0 0.2rem 0;'>
+        <div style='background:#dc2626; color:white; border-radius:50%; min-width:2.2rem;
+                    height:2.2rem; display:flex; align-items:center; justify-content:center;
+                    font-weight:800; font-size:1rem; margin-top:2px;'>1</div>
+        <div>
+            <h3 style='margin:0; color:#1f2937; font-size:1.15rem;'>
+                Produk Mana yang Paling "Berbahaya"?
+            </h3>
+            <p style='margin:0.2rem 0 0 0; color:#6b7280; font-size:0.88rem;'>
+                Volume keluhan tinggi belum tentu masalah utama — lihat
+                <b style='color:#dc2626;'>tingkat sengketa</b>-nya.
+                Inilah produk yang benar-benar merugikan konsumen.
+            </p>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    col_c1a, col_c1b = st.columns([3, 2])
+    with col_c1a:
+        stk = filtered_df[filtered_df['product'].isin(top8_p)].copy()
+        disp_cnt = (
+            stk.groupby('product')['consumer_disputed_is']
+            .apply(lambda x: (x == 'Yes').sum()).reset_index(name='disputed')
+        )
+        tot_cnt = stk['product'].value_counts().reset_index()
+        tot_cnt.columns = ['product', 'total']
+        sm = disp_cnt.merge(tot_cnt, on='product')
+        sm['not_disputed']  = sm['total'] - sm['disputed']
+        sm['dispute_pct']   = (sm['disputed'] / sm['total'] * 100).round(1)
+        sm = sm.sort_values('dispute_pct', ascending=True)   # urut by dispute rate
+
+        fig1 = go.Figure()
+        fig1.add_trace(go.Bar(
+            y=sm['product'], x=sm['not_disputed'], name='Tidak Bersengketa',
+            orientation='h', marker_color='#bfdbfe',
+            hovertemplate='%{y}<br>Tidak Bersengketa: %{x:,}<extra></extra>'
+        ))
+        fig1.add_trace(go.Bar(
+            y=sm['product'], x=sm['disputed'], name='Bersengketa ⚠️',
+            orientation='h', marker_color='#dc2626',
+            customdata=sm['dispute_pct'],
+            hovertemplate='%{y}<br>Bersengketa: %{x:,}<br>Dispute Rate: %{customdata:.1f}%<extra></extra>'
+        ))
+        # Annotasi dispute % di ujung bar
+        for _, r in sm.iterrows():
+            fig1.add_annotation(
+                y=r['product'], x=r['total'] + sm['total'].max() * 0.01,
+                text=f"<b>{r['dispute_pct']:.1f}%</b>",
+                showarrow=False, xanchor='left', font=dict(size=10, color='#dc2626')
+            )
+        fig1.update_layout(
+            barmode='stack', height=400,
+            xaxis=dict(title='Jumlah Keluhan', showgrid=True, gridcolor='#f3f4f6'),
+            yaxis=dict(title=''),
+            legend=dict(orientation='h', y=1.08, x=1, xanchor='right'),
+            plot_bgcolor='white', paper_bgcolor='white',
+            margin=dict(l=10, r=80, t=30, b=40), font=dict(size=11)
+        )
+        st.plotly_chart(fig1, use_container_width=True)
+
+    with col_c1b:
+        st.markdown("##### Peringkat Risiko")
+        for _, r in sm.sort_values('dispute_pct', ascending=False).iterrows():
+            p = r['dispute_pct']
+            c = '#dc2626' if p >= 22 else '#f59e0b' if p >= 15 else '#16a34a'
+            l = 'KRITIS' if p >= 22 else 'WASPADA' if p >= 15 else 'AMAN'
+            st.markdown(f"""
+            <div style='background:#f9fafb; border-left:4px solid {c};
+                        padding:0.45rem 0.8rem; margin-bottom:0.35rem; border-radius:4px;'>
+                <div style='display:flex; justify-content:space-between; align-items:center;'>
+                    <span style='font-size:0.78rem; font-weight:600; color:#374151;
+                                 overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+                                 max-width:62%;'>{r['product'][:34]}</span>
+                    <span style='background:{c}; color:white; border-radius:9999px;
+                                 padding:0.1rem 0.45rem; font-size:0.68rem;
+                                 font-weight:700; white-space:nowrap;'>{l} {p:.1f}%</span>
+                </div>
+                <div style='font-size:0.7rem; color:#9ca3af; margin-top:1px;'>
+                    {r["disputed"]:,} dari {r["total"]:,} bersengketa
+                </div>
+            </div>""", unsafe_allow_html=True)
+        st.markdown("""<div style='font-size:0.72rem; color:#6b7280; margin-top:0.5rem;
+                        border-top:1px solid #e5e7eb; padding-top:0.5rem;'>
+            <b>Threshold:</b> KRITIS ≥22% | WASPADA ≥15% | AMAN &lt;15%<br>
+            Rata-rata industri: <b>20.2%</b>
+        </div>""", unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # ════════════════════════════════════════════════════════════════════════
+    # CHART 2 — 100% Stacked Bar: Kualitas Respons per Perusahaan
+    # ════════════════════════════════════════════════════════════════════════
+    st.markdown("""
+    <div style='display:flex; align-items:flex-start; gap:1rem; margin-bottom:0.2rem;'>
+        <div style='background:#d97706; color:white; border-radius:50%; min-width:2.2rem;
+                    height:2.2rem; display:flex; align-items:center; justify-content:center;
+                    font-weight:800; font-size:1rem; margin-top:2px;'>2</div>
+        <div>
+            <h3 style='margin:0; color:#1f2937; font-size:1.15rem;'>
+                Siapa yang Benar-Benar Menyelesaikan Masalah?
+            </h3>
+            <p style='margin:0.2rem 0 0 0; color:#6b7280; font-size:0.88rem;'>
+                <b style='color:#d97706;'>100% Stacked Bar</b> — setiap bar = 100% keluhan per perusahaan.
+                Hijau = kompensasi nyata, Merah = ditutup tanpa solusi. Mana yang dominan?
+            </p>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    resp2 = (
+        filtered_df[filtered_df['company'].isin(top10_co)]
+        .groupby(['company', 'company_response_to_consumer'])
+        .size().reset_index(name='count')
+    )
+    resp2['pct'] = (resp2['count'] / resp2.groupby('company')['count'].transform('sum') * 100).round(1)
+
+    mon2  = resp2[resp2['company_response_to_consumer'].str.contains('monetary', case=False, na=False)]
+    order2 = mon2.groupby('company')['pct'].sum().sort_values(ascending=False).index.tolist()
+    for c in top10_co:
+        if c not in order2: order2.append(c)
+
+    resp_colors2 = {
+        'Closed with monetary relief':     '#16a34a',
+        'Closed with non-monetary relief': '#86efac',
+        'Closed with explanation':         '#93c5fd',
+        'Closed without relief':           '#f87171',
+        'Closed':                          '#d1d5db',
+        'In progress':                     '#fbbf24',
+        'Untimely response':               '#dc2626',
+    }
+    fig2 = go.Figure()
+    for rt in resp2['company_response_to_consumer'].unique():
+        sub2 = resp2[resp2['company_response_to_consumer'] == rt]
+        sub2 = sub2.set_index('company').reindex(order2).reset_index()
+        fig2.add_trace(go.Bar(
+            y=sub2['company'], x=sub2['pct'].fillna(0), name=rt,
+            orientation='h', marker_color=resp_colors2.get(rt, '#e5e7eb'),
+            hovertemplate='%{y}<br>' + rt + ': %{x:.1f}%<extra></extra>'
+        ))
+    fig2.update_layout(
+        barmode='stack', height=420,
+        xaxis=dict(title='Persentase (%)', ticksuffix='%', range=[0,100], showgrid=True, gridcolor='#f3f4f6'),
+        yaxis=dict(title='', categoryorder='array', categoryarray=list(reversed(order2))),
+        legend=dict(orientation='h', y=-0.3, x=0.5, xanchor='center', font=dict(size=9.5)),
+        plot_bgcolor='white', paper_bgcolor='white',
+        margin=dict(l=10, r=10, t=20, b=110), font=dict(size=11)
+    )
+    st.plotly_chart(fig2, use_container_width=True)
+    st.markdown("""
+    <div style='background:#f0fdf4; border-left:4px solid #16a34a;
+                padding:0.6rem 1rem; border-radius:6px; font-size:0.85rem; margin-top:-0.5rem;'>
+        <b>💡 Cara baca:</b> Diurutkan dari perusahaan yang <b>paling banyak memberi kompensasi finansial</b> (hijau tua) ke terendah.
+        Perusahaan di bawah = lebih banyak menutup keluhan tanpa solusi nyata.
+    </div>""", unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # ════════════════════════════════════════════════════════════════════════
+    # CHART 3 — Stacked Bar Vertikal: Tren Keluhan per Produk per Tahun
+    # ════════════════════════════════════════════════════════════════════════
+    st.markdown("""
+    <div style='display:flex; align-items:flex-start; gap:1rem; margin-bottom:0.2rem;'>
+        <div style='background:#7c3aed; color:white; border-radius:50%; min-width:2.2rem;
+                    height:2.2rem; display:flex; align-items:center; justify-content:center;
+                    font-weight:800; font-size:1rem; margin-top:2px;'>3</div>
+        <div>
+            <h3 style='margin:0; color:#1f2937; font-size:1.15rem;'>
+                Tren Keluhan per Tahun — Komposisi Produk Bergeser?
+            </h3>
+            <p style='margin:0.2rem 0 0 0; color:#6b7280; font-size:0.88rem;'>
+                <b style='color:#7c3aed;'>Stacked Bar vertikal</b> — bukan sekadar naik/turun total,
+                tapi <b>produk mana yang mendorong kenaikan</b>?
+                Drop 2016 = data belum lengkap (sebagian tahun).
+            </p>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    col_c3a, col_c3b = st.columns([3, 2])
+    with col_c3a:
+        tren3 = (
+            filtered_df[filtered_df['product'].isin(top5_p)]
+            .groupby(['tahun', 'product']).size().reset_index(name='jumlah')
+        )
+        pal3 = ['#1f77b4','#ff7f0e','#2ca02c','#d62728','#9467bd']
+        fig3 = go.Figure()
+        for i, prod in enumerate(top5_p):
+            sub3 = tren3[tren3['product'] == prod]
+            fig3.add_trace(go.Bar(
+                x=sub3['tahun'].astype(str), y=sub3['jumlah'],
+                name=prod, marker_color=pal3[i % 5],
+                hovertemplate='%{x} — ' + prod + '<br>%{y:,} keluhan<extra></extra>'
+            ))
+        # Annotasi total per tahun di atas bar
+        totals3 = tren3.groupby('tahun')['jumlah'].sum().reset_index()
+        for _, r in totals3.iterrows():
+            fig3.add_annotation(
+                x=str(int(r['tahun'])), y=r['jumlah'],
+                text=f"<b>{int(r['jumlah']):,}</b>",
+                showarrow=False, yshift=8, font=dict(size=9.5, color='#374151')
+            )
+        fig3.update_layout(
+            barmode='stack', height=390,
+            xaxis=dict(title='Tahun', showgrid=False),
+            yaxis=dict(title='Jumlah Keluhan', showgrid=True, gridcolor='#f3f4f6'),
+            legend=dict(orientation='h', y=1.08, x=1, xanchor='right', font=dict(size=9.5)),
+            plot_bgcolor='white', paper_bgcolor='white',
+            margin=dict(l=10, r=10, t=30, b=40), font=dict(size=11)
+        )
+        st.plotly_chart(fig3, use_container_width=True)
+
+    with col_c3b:
+        st.markdown("##### Sinyal Tren per Produk")
+        if len(filtered_df['tahun'].unique()) >= 2:
+            yr_s   = sorted(filtered_df['tahun'].dropna().unique())
+            yf, yl = yr_s[0], yr_s[-1]
+            for prod in top5_p:
+                sp   = filtered_df[filtered_df['product'] == prod]
+                vf   = len(sp[sp['tahun'] == yf])
+                vl   = len(sp[sp['tahun'] == yl])
+                gr   = ((vl - vf) / vf * 100) if vf > 0 else 0
+                arr  = '▲' if gr > 0 else '▼'
+                col3 = '#dc2626' if gr > 10 else '#16a34a' if gr < -10 else '#f59e0b'
+                lbl  = 'NAIK' if gr > 10 else 'TURUN' if gr < -10 else 'STABIL'
+                st.markdown(f"""
+                <div style='background:#f9fafb; border-left:4px solid {col3};
+                            padding:0.45rem 0.8rem; margin-bottom:0.35rem; border-radius:4px;'>
+                    <div style='font-size:0.78rem; font-weight:600; color:#374151;
+                                overflow:hidden; text-overflow:ellipsis; white-space:nowrap;'
+                    >{prod[:38]}</div>
+                    <div style='display:flex; justify-content:space-between; margin-top:2px;'>
+                        <span style='font-size:0.7rem; color:#9ca3af;'>
+                            {vf:,} ({int(yf)}) → {vl:,} ({int(yl)})
+                        </span>
+                        <span style='color:{col3}; font-weight:700; font-size:0.78rem;'>
+                            {arr} {abs(gr):.1f}% {lbl}
+                        </span>
+                    </div>
+                </div>""", unsafe_allow_html=True)
+        else:
+            st.info("Pilih 2+ tahun untuk melihat sinyal tren.")
+
+    st.markdown("---")
+
+    # ════════════════════════════════════════════════════════════════════════
+    # CHART 4 — Bar Chart Horizontal: Top 5 Issue per Top Company
+    # ════════════════════════════════════════════════════════════════════════
+    st.markdown("""
+    <div style='display:flex; align-items:flex-start; gap:1rem; margin-bottom:0.2rem;'>
+        <div style='background:#0891b2; color:white; border-radius:50%; min-width:2.2rem;
+                    height:2.2rem; display:flex; align-items:center; justify-content:center;
+                    font-weight:800; font-size:1rem; margin-top:2px;'>4</div>
+        <div>
+            <h3 style='margin:0; color:#1f2937; font-size:1.15rem;'>
+                Top 5 Perusahaan vs Top 5 Masalah — Di Mana Titik Panasnya?
+            </h3>
+            <p style='margin:0.2rem 0 0 0; color:#6b7280; font-size:0.88rem;'>
+                <b style='color:#0891b2;'>Grouped Bar</b> — kombinasi perusahaan &times; jenis masalah.
+                Identifikasi pasangan perusahaan-masalah yang paling kritis untuk ditindaklanjuti.
+            </p>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    heat_df = (
+        filtered_df[
+            filtered_df['company'].isin(top5_co) &
+            filtered_df['issue'].isin(top5_iss)
+        ]
+        .groupby(['company', 'issue']).size().reset_index(name='jumlah')
+    )
+    # Potong nama issue agar tidak terlalu panjang
+    heat_df['issue_short'] = heat_df['issue'].str[:35]
+    heat_df['company_short'] = heat_df['company'].apply(
+        lambda x: x.split('&')[0].split(',')[0].strip()[:22]
+    )
+
+    pal4 = ['#0891b2','#0e7490','#155e75','#164e63','#083344']
+    fig4 = go.Figure()
+    for i, comp in enumerate(top5_co):
+        sub4 = heat_df[heat_df['company'] == comp]
+        fig4.add_trace(go.Bar(
+            x=sub4['jumlah'], y=sub4['issue_short'],
+            name=comp.split('&')[0].split(',')[0].strip()[:22],
+            orientation='h', marker_color=pal4[i % 5],
+            hovertemplate='<b>%{fullText}</b><br>' + comp[:30] + '<br>%{x:,} keluhan<extra></extra>',
+        ))
+    fig4.update_layout(
+        barmode='group', height=420,
+        xaxis=dict(title='Jumlah Keluhan', showgrid=True, gridcolor='#f3f4f6'),
+        yaxis=dict(title=''),
+        legend=dict(orientation='h', y=1.08, x=1, xanchor='right', font=dict(size=9.5)),
+        plot_bgcolor='white', paper_bgcolor='white',
+        margin=dict(l=10, r=10, t=30, b=50), font=dict(size=11)
+    )
+    st.plotly_chart(fig4, use_container_width=True)
+
+    # Temukan kombinasi terburuk
+    if len(heat_df) > 0:
+        worst = heat_df.nlargest(1, 'jumlah').iloc[0]
+        st.markdown(f"""
+        <div style='background:#fef2f2; border-left:4px solid #dc2626;
+                    padding:0.6rem 1rem; border-radius:6px; font-size:0.85rem; margin-top:-0.5rem;'>
+            <b>🔴 Kombinasi paling kritis:</b>
+            <b>{worst['company'][:40]}</b> dengan masalah <b>"{worst['issue'][:50]}"</b>
+            — <b>{int(worst['jumlah']):,} keluhan</b>. Ini titik panas yang butuh tindakan segera.
+        </div>""", unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # ════════════════════════════════════════════════════════════════════════
+    # CHART 5 — Line Chart: Tren Bulanan + Dispute Rate Overlay
+    # ════════════════════════════════════════════════════════════════════════
+    st.markdown("""
+    <div style='display:flex; align-items:flex-start; gap:1rem; margin-bottom:0.2rem;'>
+        <div style='background:#059669; color:white; border-radius:50%; min-width:2.2rem;
+                    height:2.2rem; display:flex; align-items:center; justify-content:center;
+                    font-weight:800; font-size:1rem; margin-top:2px;'>5</div>
+        <div>
+            <h3 style='margin:0; color:#1f2937; font-size:1.15rem;'>
+                Tren Bulanan: Volume Keluhan vs Tingkat Sengketa
+            </h3>
+            <p style='margin:0.2rem 0 0 0; color:#6b7280; font-size:0.88rem;'>
+                <b style='color:#059669;'>Dual-axis Line Chart</b> — apakah lonjakan volume
+                <b>selalu diikuti naiknya dispute rate</b>? Jika ya, ada masalah sistemik.
+                Jika tidak, ada bulan-bulan "berbahaya" tersembunyi.
+            </p>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    bulan_data = (
+        filtered_df
+        .groupby(['tahun', 'bulan'])
+        .agg(
+            jumlah      = ('complaint_id', 'count'),
+            disputed    = ('consumer_disputed_is', lambda x: (x == 'Yes').sum())
+        ).reset_index()
+    )
+    bulan_data['dispute_rate'] = (bulan_data['disputed'] / bulan_data['jumlah'] * 100).round(1)
+    bulan_data['periode']      = bulan_data['tahun'].astype(str) + '-' + bulan_data['bulan'].astype(str).str.zfill(2)
+    bulan_data = bulan_data.sort_values('periode')
+
+    fig5 = go.Figure()
+    # Bar volume (sumbu kiri)
+    fig5.add_trace(go.Bar(
+        x=bulan_data['periode'], y=bulan_data['jumlah'],
+        name='Volume Keluhan', marker_color='#bfdbfe', opacity=0.7,
+        yaxis='y1',
+        hovertemplate='%{x}<br>Volume: %{y:,}<extra></extra>'
+    ))
+    # Line dispute rate (sumbu kanan)
+    fig5.add_trace(go.Scatter(
+        x=bulan_data['periode'], y=bulan_data['dispute_rate'],
+        name='Dispute Rate %', mode='lines+markers',
+        line=dict(color='#dc2626', width=2.5),
+        marker=dict(size=4),
+        yaxis='y2',
+        hovertemplate='%{x}<br>Dispute Rate: %{y:.1f}%<extra></extra>'
+    ))
+    # Garis rata-rata dispute rate
+    avg_dr = bulan_data['dispute_rate'].mean()
+    fig5.add_hline(
+        y=avg_dr, line_dash='dash', line_color='#f59e0b',
+        annotation_text=f'Avg Dispute Rate: {avg_dr:.1f}%',
+        annotation_position='top right', annotation_font_size=10,
+        yref='y2'
+    )
+    fig5.update_layout(
+        height=400,
+        xaxis=dict(title='Periode (Tahun-Bulan)', showgrid=False,
+                   tickangle=-45, nticks=20),
+        yaxis =dict(title='Jumlah Keluhan', showgrid=True,
+                    gridcolor='#f3f4f6', side='left'),
+        yaxis2=dict(title='Dispute Rate (%)', overlaying='y', side='right',
+                    showgrid=False, ticksuffix='%', range=[0, 40]),
+        legend=dict(orientation='h', y=1.08, x=1, xanchor='right'),
+        plot_bgcolor='white', paper_bgcolor='white',
+        margin=dict(l=10, r=60, t=30, b=80), font=dict(size=11),
+        bargap=0.1
+    )
+    st.plotly_chart(fig5, use_container_width=True)
+
+    # Temukan bulan dispute rate tertinggi
+    worst_month = bulan_data.nlargest(1, 'dispute_rate').iloc[0]
+    best_month  = bulan_data.nsmallest(1, 'dispute_rate').iloc[0]
+    st.markdown(f"""
+    <div style='background:#fffbeb; border-left:4px solid #f59e0b;
+                padding:0.6rem 1rem; border-radius:6px; font-size:0.85rem; margin-top:-0.5rem;'>
+        <b>⚠️ Bulan paling berbahaya:</b> <b>{worst_month['periode']}</b>
+        — dispute rate <b>{worst_month['dispute_rate']:.1f}%</b>
+        ({int(worst_month['disputed']):,} sengketa dari {int(worst_month['jumlah']):,} keluhan).
+        &nbsp;&nbsp;|&nbsp;&nbsp;
+        <b>✅ Terbaik:</b> <b>{best_month['periode']}</b>
+        — dispute rate hanya <b>{best_month['dispute_rate']:.1f}%</b>.
+    </div>""", unsafe_allow_html=True)
+
+    # ── Ringkasan 5 Takeaway ─────────────────────────────────────────────────
+    st.markdown("---")
+    st.markdown("### 🎯 5 Takeaway Utama untuk Presentasi")
+    takeaways = [
+        ("🔴", "#fef2f2", "#fca5a5", "#991b1b",
+         "Mortgage = Produk Paling Berisiko",
+         "Dispute rate 23.2% — tertinggi dari semua produk. Nilai transaksi besar membuat konsumen lebih gigih bersengketa. Butuh SOP penanganan khusus."),
+        ("🟠", "#fffbeb", "#fcd34d", "#92400e",
+         "72% Keluhan Ditutup Hanya dengan Penjelasan",
+         "Dominasi 'Closed with explanation' menunjukkan mayoritas perusahaan tidak memberikan kompensasi nyata. Konsumen sering merasa tidak puas."),
+        ("🟣", "#f5f3ff", "#c4b5fd", "#5b21b6",
+         "Keluhan Naik 5.5x dari 2011 ke 2015",
+         "Pertumbuhan masif dalam 4 tahun — bukan noise, ini sinyal struktural. Credit Reporting tumbuh paling cepat relatif terhadap baseline."),
+        ("🔵", "#eff6ff", "#93c5fd", "#1e40af",
+         "Bank of America Paling Banyak Keluhan (55,998)",
+         "Top 5 perusahaan menyumbang ~35% dari semua keluhan. Konsentrasi ini memudahkan intervensi regulasi yang tepat sasaran."),
+        ("🟢", "#f0fdf4", "#86efac", "#166534",
+         "Ada Bulan-Bulan 'Tersembunyi' yang Dispute Rate Melonjak",
+         "Volume rendah bukan berarti aman — beberapa bulan punya dispute rate tinggi meski volume kecil. Monitoring perlu berbasis rate, bukan hanya volume absolut."),
+    ]
+    col_tk = st.columns(5)
+    for i, (icon, bg, border, tc, title, desc) in enumerate(takeaways):
+        with col_tk[i]:
+            st.markdown(f"""
+            <div style='background:{bg}; border:1px solid {border}; border-radius:8px;
+                        padding:0.9rem; height:100%; min-height:160px;'>
+                <div style='font-size:1.4rem; margin-bottom:0.3rem;'>{icon}</div>
+                <div style='font-weight:700; color:{tc}; font-size:0.8rem;
+                            margin-bottom:0.4rem; line-height:1.3;'>{title}</div>
+                <div style='color:#6b7280; font-size:0.73rem; line-height:1.4;'>{desc}</div>
+            </div>""", unsafe_allow_html=True)
 
 with tab0:
     st.markdown("""
