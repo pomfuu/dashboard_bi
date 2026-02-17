@@ -186,13 +186,384 @@ with col5:
 st.markdown("---")
 
 # Tab untuk analisis berbeda
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab0, tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    "🚨 Executive Story",
     "🔍 Insight Utama",
     "📊 Analisis Tren",
     "🏢 Analisis Perusahaan",
     "📋 Pivot Tables",
     "💡 Rekomendasi Power BI"
 ])
+
+with tab0:
+    st.markdown("""
+    <div style='background: linear-gradient(135deg, #1f2937 0%, #1f77b4 100%);
+                padding: 2rem; border-radius: 12px; margin-bottom: 1.5rem;'>
+        <h1 style='color: white; margin: 0; font-size: 1.8rem;'>🚨 Executive Story: Apa yang Paling Mendesak?</h1>
+        <p style='color: #93c5fd; margin: 0.5rem 0 0 0; font-size: 1rem;'>
+            3 temuan kritis yang membutuhkan tindakan segera — dirancang untuk Power BI & presentasi eksekutif
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ── PRE-COMPUTE semua data yang dibutuhkan ──────────────────────────────
+    produk_counts    = filtered_df['product'].value_counts()
+    top5_prod        = produk_counts.head(5).index.tolist()
+    top8_issues      = filtered_df['issue'].value_counts().head(8).index.tolist()
+    top10_companies  = filtered_df['company'].value_counts().head(10).index.tolist()
+    top10_states     = filtered_df['state'].value_counts().head(10).index.tolist()
+    top6_prod        = produk_counts.head(6).index.tolist()
+
+    dispute_by_product = (
+        filtered_df.groupby('product')['consumer_disputed_is']
+        .apply(lambda x: (x == 'Yes').mean() * 100)
+        .reset_index()
+        .rename(columns={'consumer_disputed_is': 'dispute_rate'})
+    )
+    volume_by_product = filtered_df['product'].value_counts().reset_index()
+    volume_by_product.columns = ['product', 'volume']
+    bubble_df = dispute_by_product.merge(volume_by_product, on='product')
+
+    # ── STORY 1 ─────────────────────────────────────────────────────────────
+    st.markdown("---")
+    st.markdown("""
+    <div style='display:flex; align-items:center; gap:0.6rem; margin-bottom:0.3rem'>
+        <span style='background:#dc2626; color:white; border-radius:50%; width:2rem;
+                     height:2rem; display:inline-flex; align-items:center;
+                     justify-content:center; font-weight:bold; font-size:1rem;'>1</span>
+        <h2 style='margin:0; color:#1f2937;'>Produk Mana yang Paling "Berbahaya"?</h2>
+    </div>
+    <p style='color:#6b7280; margin-bottom:1rem; margin-left:2.6rem;'>
+        Volume keluhan tinggi belum tentu masalah utama — lihat <b>tingkat sengketa</b>-nya.
+        Inilah produk yang benar-benar merugikan konsumen.
+    </p>
+    """, unsafe_allow_html=True)
+
+    col_l, col_r = st.columns([3, 2])
+
+    with col_l:
+        # Stacked bar: volume + dispute rate per produk (top 8)
+        top8_prod = produk_counts.head(8).index.tolist()
+        stack_df = filtered_df[filtered_df['product'].isin(top8_prod)].copy()
+
+        # Hitung disputed vs non-disputed
+        disputed_cnt = (
+            stack_df.groupby('product')['consumer_disputed_is']
+            .apply(lambda x: (x == 'Yes').sum())
+            .reset_index(name='disputed')
+        )
+        total_cnt = stack_df['product'].value_counts().reset_index()
+        total_cnt.columns = ['product', 'total']
+        stack_merged = disputed_cnt.merge(total_cnt, on='product')
+        stack_merged['not_disputed'] = stack_merged['total'] - stack_merged['disputed']
+        stack_merged['dispute_pct'] = (stack_merged['disputed'] / stack_merged['total'] * 100).round(1)
+        stack_merged = stack_merged.sort_values('total', ascending=True)
+
+        fig_story1 = go.Figure()
+        fig_story1.add_trace(go.Bar(
+            y=stack_merged['product'],
+            x=stack_merged['not_disputed'],
+            name='Tidak Bersengketa',
+            orientation='h',
+            marker_color='#93c5fd',
+            hovertemplate='%{y}<br>Tidak Bersengketa: %{x:,}<extra></extra>'
+        ))
+        fig_story1.add_trace(go.Bar(
+            y=stack_merged['product'],
+            x=stack_merged['disputed'],
+            name='Bersengketa ⚠️',
+            orientation='h',
+            marker_color='#dc2626',
+            hovertemplate='%{y}<br>Bersengketa: %{x:,} (%{customdata:.1f}%)<extra></extra>',
+            customdata=stack_merged['dispute_pct']
+        ))
+        fig_story1.update_layout(
+            barmode='stack',
+            title='Stacked Bar: Volume Keluhan & Porsi Sengketa per Produk',
+            xaxis_title='Jumlah Keluhan',
+            yaxis_title='',
+            height=420,
+            legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1),
+            plot_bgcolor='white',
+            paper_bgcolor='white',
+            margin=dict(l=10, r=10, t=60, b=40),
+            font=dict(size=12)
+        )
+        st.plotly_chart(fig_story1, use_container_width=True)
+
+    with col_r:
+        st.markdown("#### Peringkat Risiko Produk")
+        risk_df = stack_merged.sort_values('dispute_pct', ascending=False)[['product', 'total', 'disputed', 'dispute_pct']]
+        risk_df.columns = ['Produk', 'Total', 'Sengketa', 'Dispute %']
+
+        for _, row in risk_df.iterrows():
+            pct = row['Dispute %']
+            color = '#dc2626' if pct >= 25 else '#f59e0b' if pct >= 15 else '#16a34a'
+            label = 'KRITIS' if pct >= 25 else 'WASPADA' if pct >= 15 else 'AMAN'
+            st.markdown(f"""
+            <div style='background:#f9fafb; border-left: 4px solid {color};
+                        padding: 0.5rem 0.8rem; margin-bottom:0.4rem; border-radius:4px;'>
+                <div style='display:flex; justify-content:space-between; align-items:center;'>
+                    <span style='font-size:0.78rem; font-weight:600; color:#374151;
+                                 max-width:65%; overflow:hidden; text-overflow:ellipsis;
+                                 white-space:nowrap;'>{row['Produk'][:35]}</span>
+                    <span style='background:{color}; color:white; border-radius:9999px;
+                                 padding:0.1rem 0.5rem; font-size:0.7rem;
+                                 font-weight:700;'>{label} {pct:.1f}%</span>
+                </div>
+                <div style='font-size:0.72rem; color:#6b7280; margin-top:2px;'>
+                    {row['Sengketa']:,} dari {row['Total']:,} keluhan bersengketa
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+    # ── STORY 2 ─────────────────────────────────────────────────────────────
+    st.markdown("---")
+    st.markdown("""
+    <div style='display:flex; align-items:center; gap:0.6rem; margin-bottom:0.3rem'>
+        <span style='background:#d97706; color:white; border-radius:50%; width:2rem;
+                     height:2rem; display:inline-flex; align-items:center;
+                     justify-content:center; font-weight:bold; font-size:1rem;'>2</span>
+        <h2 style='margin:0; color:#1f2937;'>Respons Perusahaan: Siapa yang Benar-Benar Menyelesaikan Masalah?</h2>
+    </div>
+    <p style='color:#6b7280; margin-bottom:1rem; margin-left:2.6rem;'>
+        Membandingkan <b>jenis resolusi</b> antar perusahaan terbesar — apakah mereka menutup
+        dengan solusi nyata atau hanya "dijelaskan" saja tanpa kompensasi?
+    </p>
+    """, unsafe_allow_html=True)
+
+    resp_data = (
+        filtered_df[filtered_df['company'].isin(top10_companies)]
+        .groupby(['company', 'company_response_to_consumer'])
+        .size()
+        .reset_index(name='count')
+    )
+    total_per_company = resp_data.groupby('company')['count'].transform('sum')
+    resp_data['pct'] = (resp_data['count'] / total_per_company * 100).round(1)
+
+    # Urutkan perusahaan berdasarkan % monetary relief (paling bermasalah di atas)
+    monetary = resp_data[resp_data['company_response_to_consumer'].str.contains('monetary', case=False, na=False)]
+    monetary_rank = monetary.groupby('company')['pct'].sum().sort_values(ascending=False)
+    company_order = monetary_rank.index.tolist()
+    # Tambahkan perusahaan yang tidak ada monetary relief ke akhir
+    for c in top10_companies:
+        if c not in company_order:
+            company_order.append(c)
+
+    # Warna per jenis respons
+    response_colors = {
+        'Closed with monetary relief':     '#16a34a',
+        'Closed with non-monetary relief': '#4ade80',
+        'Closed with explanation':         '#93c5fd',
+        'Closed without relief':           '#f87171',
+        'In progress':                     '#fbbf24',
+        'Untimely response':               '#dc2626',
+    }
+    all_responses = resp_data['company_response_to_consumer'].unique().tolist()
+    colormap = {r: response_colors.get(r, '#d1d5db') for r in all_responses}
+
+    fig_story2 = go.Figure()
+    for resp_type in all_responses:
+        sub = resp_data[resp_data['company_response_to_consumer'] == resp_type]
+        # Pastikan urutan company konsisten
+        sub = sub.set_index('company').reindex(company_order).reset_index()
+        fig_story2.add_trace(go.Bar(
+            y=sub['company'],
+            x=sub['pct'].fillna(0),
+            name=resp_type,
+            orientation='h',
+            marker_color=colormap[resp_type],
+            hovertemplate='%{y}<br>' + resp_type + ': %{x:.1f}%<extra></extra>',
+        ))
+
+    fig_story2.update_layout(
+        barmode='stack',
+        title='100% Stacked Bar: Komposisi Jenis Respons per Perusahaan (Top 10)',
+        xaxis=dict(title='Persentase (%)', ticksuffix='%', range=[0, 100]),
+        yaxis=dict(title='', categoryorder='array', categoryarray=list(reversed(company_order))),
+        height=480,
+        legend=dict(orientation='h', yanchor='bottom', y=-0.35, xanchor='center', x=0.5, font=dict(size=10)),
+        plot_bgcolor='white',
+        paper_bgcolor='white',
+        margin=dict(l=10, r=10, t=60, b=120),
+        font=dict(size=11)
+    )
+    st.plotly_chart(fig_story2, use_container_width=True)
+
+    st.markdown("""
+    <div style='background:#fffbeb; border-left:4px solid #d97706;
+                padding:0.8rem 1rem; border-radius:6px; margin-top:-0.5rem;'>
+        <b>🔍 Cara membaca grafik ini:</b> Urutan dari atas = perusahaan dengan % <span style='color:#16a34a;font-weight:700'>
+        monetary relief tertinggi</span> (paling sering memberi kompensasi).
+        Dominasi warna <span style='color:#f87171;font-weight:700'>merah</span> = keluhan ditutup tanpa solusi nyata.
+        Ini langsung bisa direplikasi di Power BI sebagai <i>100% Stacked Bar Chart</i>.
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ── STORY 3 ─────────────────────────────────────────────────────────────
+    st.markdown("---")
+    st.markdown("""
+    <div style='display:flex; align-items:center; gap:0.6rem; margin-bottom:0.3rem'>
+        <span style='background:#7c3aed; color:white; border-radius:50%; width:2rem;
+                     height:2rem; display:inline-flex; align-items:center;
+                     justify-content:center; font-weight:bold; font-size:1rem;'>3</span>
+        <h2 style='margin:0; color:#1f2937;'>Tren Tahunan: Apakah Masalah Makin Parah?</h2>
+    </div>
+    <p style='color:#6b7280; margin-bottom:1rem; margin-left:2.6rem;'>
+        Stacked bar per tahun menunjukkan <b>apakah komposisi produk bermasalah bergeser</b>
+        — bukan sekadar naik/turun total volume.
+    </p>
+    """, unsafe_allow_html=True)
+
+    col_a, col_b = st.columns([3, 2])
+
+    with col_a:
+        tren_prod = (
+            filtered_df[filtered_df['product'].isin(top5_prod)]
+            .groupby(['tahun', 'product'])
+            .size()
+            .reset_index(name='jumlah')
+        )
+
+        product_palette = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd']
+        fig_story3 = go.Figure()
+        for idx, prod in enumerate(top5_prod):
+            sub = tren_prod[tren_prod['product'] == prod]
+            fig_story3.add_trace(go.Bar(
+                x=sub['tahun'].astype(str),
+                y=sub['jumlah'],
+                name=prod,
+                marker_color=product_palette[idx % len(product_palette)],
+                hovertemplate='%{x}<br>' + prod + ': %{y:,} keluhan<extra></extra>'
+            ))
+
+        fig_story3.update_layout(
+            barmode='stack',
+            title='Stacked Bar: Komposisi Keluhan per Produk & Tahun (Top 5 Produk)',
+            xaxis_title='Tahun',
+            yaxis_title='Jumlah Keluhan',
+            height=420,
+            legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1, font=dict(size=10)),
+            plot_bgcolor='white',
+            paper_bgcolor='white',
+            margin=dict(l=10, r=10, t=70, b=40),
+            font=dict(size=12)
+        )
+        st.plotly_chart(fig_story3, use_container_width=True)
+
+    with col_b:
+        st.markdown("#### Sinyal Tren per Produk")
+        # Hitung YoY growth tiap produk (tahun pertama vs terakhir)
+        if len(filtered_df['tahun'].unique()) >= 2:
+            tahun_sorted = sorted(filtered_df['tahun'].dropna().unique())
+            yr_first, yr_last = tahun_sorted[0], tahun_sorted[-1]
+            for prod in top5_prod:
+                sub_prod = filtered_df[filtered_df['product'] == prod]
+                v_first = len(sub_prod[sub_prod['tahun'] == yr_first])
+                v_last  = len(sub_prod[sub_prod['tahun'] == yr_last])
+                growth  = ((v_last - v_first) / v_first * 100) if v_first > 0 else 0
+                arrow   = '▲' if growth > 0 else '▼'
+                color   = '#dc2626' if growth > 10 else '#16a34a' if growth < -10 else '#f59e0b'
+                label   = 'NAIK' if growth > 10 else 'TURUN' if growth < -10 else 'STABIL'
+                st.markdown(f"""
+                <div style='background:#f9fafb; border-left:4px solid {color};
+                            padding: 0.5rem 0.8rem; margin-bottom:0.4rem; border-radius:4px;'>
+                    <div style='font-size:0.78rem; font-weight:600; color:#374151;
+                                overflow:hidden; text-overflow:ellipsis; white-space:nowrap;'
+                    >{prod[:40]}</div>
+                    <div style='display:flex; justify-content:space-between; margin-top:2px;'>
+                        <span style='font-size:0.72rem; color:#6b7280;'>
+                            {v_first:,} ({int(yr_first)}) → {v_last:,} ({int(yr_last)})
+                        </span>
+                        <span style='color:{color}; font-weight:700; font-size:0.78rem;'>
+                            {arrow} {abs(growth):.1f}% {label}
+                        </span>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+        else:
+            st.info("Pilih lebih dari 1 tahun untuk melihat tren.")
+
+    # ── RINGKASAN EKSEKUTIF ──────────────────────────────────────────────────
+    st.markdown("---")
+    st.markdown("### 📋 Ringkasan Eksekutif untuk Presentasi")
+
+    # Hitung nilai dinamis untuk ringkasan
+    most_dangerous = stack_merged.sort_values('dispute_pct', ascending=False).iloc[0]
+    lowest_monetary_company = company_order[-1] if company_order else "-"
+    highest_monetary_company = company_order[0] if company_order else "-"
+
+    col_s1, col_s2, col_s3 = st.columns(3)
+    with col_s1:
+        st.markdown(f"""
+        <div style='background:#fef2f2; border:1px solid #fca5a5;
+                    border-radius:8px; padding:1rem; height:100%;'>
+            <div style='font-size:1.5rem; margin-bottom:0.3rem;'>🔴</div>
+            <div style='font-weight:700; color:#991b1b; margin-bottom:0.4rem;'>Produk Paling Berisiko</div>
+            <div style='font-size:1.1rem; font-weight:600; color:#1f2937;
+                        overflow:hidden; text-overflow:ellipsis;'>{most_dangerous['product']}</div>
+            <div style='color:#6b7280; font-size:0.85rem; margin-top:0.3rem;'>
+                {most_dangerous['dispute_pct']:.1f}% keluhan berakhir sengketa
+                ({most_dangerous['disputed']:,} kasus)
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col_s2:
+        st.markdown(f"""
+        <div style='background:#fffbeb; border:1px solid #fcd34d;
+                    border-radius:8px; padding:1rem; height:100%;'>
+            <div style='font-size:1.5rem; margin-bottom:0.3rem;'>⚠️</div>
+            <div style='font-weight:700; color:#92400e; margin-bottom:0.4rem;'>Resolusi Terendah</div>
+            <div style='font-size:1rem; font-weight:600; color:#1f2937;
+                        overflow:hidden; text-overflow:ellipsis;'>{lowest_monetary_company}</div>
+            <div style='color:#6b7280; font-size:0.85rem; margin-top:0.3rem;'>
+                % monetary relief paling rendah dari top 10 perusahaan
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col_s3:
+        if len(filtered_df['tahun'].unique()) >= 2:
+            total_growth = ((len(filtered_df[filtered_df['tahun'] == yr_last]) -
+                             len(filtered_df[filtered_df['tahun'] == yr_first])) /
+                            len(filtered_df[filtered_df['tahun'] == yr_first]) * 100)
+            growth_color = '#991b1b' if total_growth > 0 else '#166534'
+            growth_bg = '#fef2f2' if total_growth > 0 else '#f0fdf4'
+            growth_border = '#fca5a5' if total_growth > 0 else '#86efac'
+            growth_icon = '📈' if total_growth > 0 else '📉'
+            growth_label = 'Volume Keluhan NAIK' if total_growth > 0 else 'Volume Keluhan TURUN'
+        else:
+            total_growth = 0
+            growth_color, growth_bg, growth_border = '#374151', '#f9fafb', '#d1d5db'
+            growth_icon, growth_label = '📊', 'Pilih 2+ tahun'
+
+        st.markdown(f"""
+        <div style='background:{growth_bg}; border:1px solid {growth_border};
+                    border-radius:8px; padding:1rem; height:100%;'>
+            <div style='font-size:1.5rem; margin-bottom:0.3rem;'>{growth_icon}</div>
+            <div style='font-weight:700; color:{growth_color}; margin-bottom:0.4rem;'>{growth_label}</div>
+            <div style='font-size:1.3rem; font-weight:700; color:{growth_color};'>
+                {total_growth:+.1f}%
+            </div>
+            <div style='color:#6b7280; font-size:0.85rem; margin-top:0.3rem;'>
+                {int(yr_first) if len(filtered_df["tahun"].unique()) >= 2 else "-"} →
+                {int(yr_last) if len(filtered_df["tahun"].unique()) >= 2 else "-"}
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("""
+    <div style='background:#eff6ff; border-left:4px solid #1f77b4;
+                padding:1rem 1.2rem; border-radius:6px; margin-top:1rem;'>
+        <b>💡 Catatan untuk Power BI:</b> Ketiga chart di halaman ini (Stacked Bar Horizontal,
+        100% Stacked Bar, dan Stacked Bar Vertikal per tahun) langsung dapat direplikasi
+        di Power BI menggunakan tipe visual <i>"Stacked Bar Chart"</i> dan
+        <i>"100% Stacked Bar Chart"</i> tanpa kustomisasi tambahan.
+        Gunakan kolom <code>product</code>, <code>consumer_disputed_is</code>,
+        <code>company_response_to_consumer</code>, dan <code>tahun</code> sebagai field utama.
+    </div>
+    """, unsafe_allow_html=True)
 
 with tab1:
     st.header("🔍 Insight Utama & Korelasi Multi-Dimensi")
